@@ -4,11 +4,7 @@ use crate::parser::ParsedPacket;
 use crate::signal::Signal;
 
 fn ttl_anomaly(actual: u8, baseline: u8, tolerance: u8) -> Option<u8> {
-    let delta = if actual > baseline {
-        actual - baseline
-    } else {
-        baseline - actual
-    };
+    let delta = actual.abs_diff(baseline);
     match delta > tolerance {
         true => Some(delta),
         false => None,

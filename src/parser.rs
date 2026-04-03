@@ -57,10 +57,7 @@ impl TcpFlagSet {
     }
 
     pub fn is_syn_ack(self) -> bool {
-        match self {
-            TcpFlagSet::SYN_ACK => true,
-            _ => false,
-        }
+        matches!(self, TcpFlagSet::SYN_ACK)
     }
 }
 

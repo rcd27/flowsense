@@ -86,6 +86,10 @@ impl FlowTable {
         self.flows.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.flows.is_empty()
+    }
+
     pub fn config(&self) -> &FlowsConfig {
         &self.config
     }
