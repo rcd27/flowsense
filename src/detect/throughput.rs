@@ -6,12 +6,12 @@ pub fn detect_cliff(flow: &FlowState, key: &FlowKey, config: &Config, now: f64) 
     let cfg = &config.detection.throughput;
 
     (flow.phase == FlowPhase::Transferring)
-        .then(|| flow.last_data_ts)
+        .then_some(flow.last_data_ts)
         .flatten()
         .and_then(|last_data| {
             let stall = now - last_data;
             let cliff_condition = stall >= cfg.cliff_timeout
-                && flow.bytes_rx > 0
+                && flow.bytes_rx >= cfg.cliff_min_bytes
                 && flow.bytes_rx <= cfg.cliff_threshold * 2;
             cliff_condition.then(|| Signal::ThrottleCliff {
                 ts: now,
@@ -33,7 +33,7 @@ pub fn detect_retransmit(
     let cfg = &config.detection.throughput;
 
     (flow.phase == FlowPhase::Transferring)
-        .then(|| flow.first_data_ts)
+        .then_some(flow.first_data_ts)
         .flatten()
         .and_then(|first_data| {
             let window = now - first_data;

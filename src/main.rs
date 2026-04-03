@@ -92,8 +92,8 @@ fn packet_matches_filter(
     filter_dst: Option<Ipv4Addr>,
     filter_port: Option<u16>,
 ) -> bool {
-    let ip_ok = filter_dst.map_or(true, |f| f == dst_ip);
-    let port_ok = filter_port.map_or(true, |p| p == dst_port);
+    let ip_ok = filter_dst.is_none_or(|f| f == dst_ip);
+    let port_ok = filter_port.is_none_or(|p| p == dst_port);
     ip_ok && port_ok
 }
 

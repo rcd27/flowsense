@@ -36,9 +36,9 @@ fn send_syn(table: &mut FlowTable, ts: f64) {
 fn send_syn_ack(table: &mut FlowTable, ts: f64) {
     let frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         52,
         TcpFlag::SynAck,
         2000,
@@ -163,12 +163,12 @@ fn test_no_silent_drop_if_server_responded() {
     let syn_pkt = parse(&syn_frame).expect("parse syn");
     table.update(&syn_pkt, 0.0);
 
-    // SYN-ACK → Established
+    // SYN-ACK → Established (server responds to client)
     let syn_ack_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         PORT_HIGH,
+        CLIENT_PORT,
         52,
         TcpFlag::SynAck,
         2000,
@@ -179,28 +179,13 @@ fn test_no_silent_drop_if_server_responded() {
     let syn_ack_pkt = parse(&syn_ack_frame).expect("parse syn_ack");
     table.update(&syn_ack_pkt, 0.5);
 
-    // ClientHello: dst_port=PORT_HIGH >= 1024 → FromServer by direction heuristic.
-    // We need FromClient for the ClientHello. Use low dst_port for ClientHello won't help because
-    // flow key is (SERVER, PORT_HIGH). We need to send from CLIENT side: use src=CLIENT, dst=SERVER.
-    // classify_direction checks dst_port: PORT_HIGH >= 1024 → FromServer. This won't record ClientHello.
-    // Workaround: manually build a packet where dst_port < 1024 but that changes the flow key.
-    // Actually, SYN flag makes it FromClient regardless of port.
-    // For PshAck with dst_port >= 1024 it's FromServer.
-    // The ClientHello packet needs to be FromClient to be recorded.
-    // Use the SYN path: when has_syn() is true (and not SYN_ACK), it's always FromClient.
-    // We can't use PshAck with PORT_HIGH for ClientHello (it'll be FromServer).
-    // Solution: send ClientHello using dst_port < 1024 key → but that's a different flow.
-    // Simplest: Accept that with PORT_HIGH, ClientHello isn't recorded, so has_client_hello=false.
-    // The SilentDrop condition requires has_client_hello=true, so result is None regardless.
-    // This tests the "server responded" path implicitly through Transferring phase.
-
-    // Server data: dst_port=PORT_HIGH >= 1024 → FromServer ✓ → bytes_rx > 0, phase=Transferring
+    // Server data: from SERVER to CLIENT → FromServer → bytes_rx > 0, phase=Transferring
     let data = vec![0xabu8; 100];
     let data_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         PORT_HIGH,
+        CLIENT_PORT,
         52,
         TcpFlag::PshAck,
         3000,
