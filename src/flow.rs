@@ -156,7 +156,10 @@ impl FlowTable {
 }
 
 fn classify_direction(pkt: &ParsedPacket) -> Direction {
-    if pkt.tcp_flags.has_syn() && !pkt.tcp_flags.is_syn_ack() {
+    if pkt.tcp_flags.is_syn_ack() {
+        return Direction::FromServer;
+    }
+    if pkt.tcp_flags.has_syn() {
         return Direction::FromClient;
     }
     if pkt.dst_port < 1024 {
@@ -166,9 +169,16 @@ fn classify_direction(pkt: &ParsedPacket) -> Direction {
 }
 
 pub fn flow_key_from_packet(pkt: &ParsedPacket) -> FlowKey {
-    FlowKey {
-        dst_ip: pkt.dst_ip,
-        dst_port: pkt.dst_port,
+    let dir = classify_direction(pkt);
+    match dir {
+        Direction::FromClient => FlowKey {
+            dst_ip: pkt.dst_ip,
+            dst_port: pkt.dst_port,
+        },
+        Direction::FromServer => FlowKey {
+            dst_ip: pkt.src_ip,
+            dst_port: pkt.src_port,
+        },
     }
 }
 

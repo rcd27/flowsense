@@ -76,13 +76,13 @@ fn test_syn_ack_transitions_to_established_and_records_ttl() {
     let syn_pkt = parse(&syn_frame).expect("parse syn");
     table.update(&syn_pkt, 1.0);
 
-    // SYN-ACK with same flow key (dst=SERVER_IP, dst_port=PORT_LOW).
+    // SYN-ACK from server (src=SERVER, dst=CLIENT).
     // flow.rs handles SYN_ACK independent of direction.
     let syn_ack_frame = build_tcp_packet(
         SERVER_IP,
-        SERVER_IP,
-        CLIENT_PORT,
+        CLIENT_IP,
         PORT_LOW,
+        CLIENT_PORT,
         56,
         TcpFlag::SynAck,
         2000,
@@ -122,9 +122,9 @@ fn test_client_hello_records_sni() {
     // SYN-ACK → Established
     let syn_ack_frame = build_tcp_packet(
         SERVER_IP,
-        SERVER_IP,
-        CLIENT_PORT,
+        CLIENT_IP,
         PORT_LOW,
+        CLIENT_PORT,
         56,
         TcpFlag::SynAck,
         2000,
@@ -182,9 +182,9 @@ fn test_data_transitions_to_transferring() {
     // SYN-ACK → Established
     let syn_ack_frame = build_tcp_packet(
         SERVER_IP,
-        SERVER_IP,
-        CLIENT_PORT,
+        CLIENT_IP,
         PORT_HIGH,
+        CLIENT_PORT,
         56,
         TcpFlag::SynAck,
         2000,
@@ -195,13 +195,13 @@ fn test_data_transitions_to_transferring() {
     let syn_ack_pkt = parse(&syn_ack_frame).expect("parse syn_ack");
     table.update(&syn_ack_pkt, 1.5);
 
-    // Server data: dst_port=PORT_HIGH(8443) >= 1024 → FromServer ✓
+    // Server data: src=SERVER, dst=CLIENT → FromServer ✓
     let data = vec![0xabu8; 1400];
     let data_frame = build_tcp_packet(
         SERVER_IP,
-        SERVER_IP,
-        CLIENT_PORT,
+        CLIENT_IP,
         PORT_HIGH,
+        CLIENT_PORT,
         56,
         TcpFlag::PshAck,
         3000,

@@ -1,15 +1,14 @@
 #!/bin/sh
 set -e
 
-# --- Configuration ---
 BRIDGE=br0
 VETH_HOST=veth-br
-VETH_NS=veth-socks
-NS=socks
+VETH_NS=veth-proxy
+NS=proxy
 SUBNET=10.99.0
 HOST_IP=${SUBNET}.1
 NS_IP=${SUBNET}.2
-SOCKS_PORT=${SOCKS_PORT:-1080}
+PROXY_PORT=${PROXY_PORT:-8080}
 
 echo "flowsense: setting up network topology..."
 
@@ -36,52 +35,54 @@ ip netns exec ${NS} ip link set ${VETH_NS} up
 ip netns exec ${NS} ip link set lo up
 ip netns exec ${NS} ip route add default via ${HOST_IP}
 
-# --- Configure bridge IP (acts as gateway for namespace) ---
+# --- Configure bridge IP (gateway for namespace) ---
 ip addr add ${HOST_IP}/24 dev ${BRIDGE}
 
 # --- Enable IP forwarding ---
 echo 1 > /proc/sys/net/ipv4/ip_forward
 
-# --- NAT: masquerade traffic from socks namespace going to internet ---
+# --- NAT: masquerade traffic from proxy namespace ---
 iptables -t nat -A POSTROUTING -s ${SUBNET}.0/24 -o eth0 -j MASQUERADE
-iptables -A FORWARD -i ${BRIDGE} -o eth0 -j ACCEPT
-iptables -A FORWARD -i eth0 -o ${BRIDGE} -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -P FORWARD ACCEPT
 
-# --- Start microsocks in namespace (background) ---
-echo "flowsense: starting SOCKS5 proxy on :${SOCKS_PORT}..."
-ip netns exec ${NS} microsocks -p ${SOCKS_PORT} -b 0.0.0.0 &
-SOCKS_PID=$!
+# --- DNAT: forward proxy port from eth0 to namespace ---
+iptables -t nat -A PREROUTING -p tcp --dport ${PROXY_PORT} -j DNAT --to-destination ${NS_IP}:${PROXY_PORT}
+iptables -t nat -A OUTPUT -p tcp --dport ${PROXY_PORT} -j DNAT --to-destination ${NS_IP}:${PROXY_PORT}
 
-# We need microsocks to listen on the namespace IP, but be reachable
-# from outside the container. Add a DNAT rule to forward container's
-# port to the namespace IP.
-iptables -t nat -A PREROUTING -p tcp --dport ${SOCKS_PORT} -j DNAT --to-destination ${NS_IP}:${SOCKS_PORT}
-iptables -t nat -A OUTPUT -p tcp --dport ${SOCKS_PORT} -j DNAT --to-destination ${NS_IP}:${SOCKS_PORT}
-iptables -A FORWARD -p tcp -d ${NS_IP} --dport ${SOCKS_PORT} -j ACCEPT
+# --- Start tinyproxy in namespace ---
+cat > /tmp/tinyproxy.conf <<EOF
+Port ${PROXY_PORT}
+Listen 0.0.0.0
+Timeout 30
+Allow 0.0.0.0/0
+MaxClients 100
+DisableViaHeader Yes
+EOF
 
-# Wait a moment for microsocks to start
+echo "flowsense: starting HTTP proxy on :${PROXY_PORT}..."
+ip netns exec ${NS} tinyproxy -d -c /tmp/tinyproxy.conf &
+PROXY_PID=$!
 sleep 0.5
 
-# Verify microsocks is running
-if ! kill -0 ${SOCKS_PID} 2>/dev/null; then
-    echo "flowsense: ERROR — microsocks failed to start"
+if ! kill -0 ${PROXY_PID} 2>/dev/null; then
+    echo "flowsense: ERROR — tinyproxy failed to start"
     exit 1
 fi
 
-echo "flowsense: SOCKS5 proxy ready on :${SOCKS_PORT}"
-echo "flowsense: configure your browser: SOCKS5 → <host-ip>:${SOCKS_PORT}"
+echo "flowsense: HTTP proxy ready on :${PROXY_PORT}"
+echo "flowsense: usage: curl -x http://<host-ip>:${PROXY_PORT} https://example.com"
+echo "flowsense: usage: blockcheckw status --via http://<host-ip>:${PROXY_PORT} --domain-list domains.txt"
 echo ""
 
 # --- Cleanup on exit ---
 cleanup() {
     echo ""
     echo "flowsense: shutting down..."
-    kill ${SOCKS_PID} 2>/dev/null || true
+    kill ${PROXY_PID} 2>/dev/null || true
     ip netns del ${NS} 2>/dev/null || true
     ip link del ${BRIDGE} 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
-# --- Start flowsense (foreground) ---
-# Pass through all CLI arguments except -i (we force br0)
+# --- Start flowsense on bridge (foreground) ---
 exec flowsense -i ${BRIDGE} "$@"

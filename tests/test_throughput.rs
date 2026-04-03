@@ -42,9 +42,9 @@ fn setup_transferring(table: &mut FlowTable, bytes_rx: u64) -> f64 {
     // SYN-ACK from server → Established
     let syn_ack_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         56,
         TcpFlag::SynAck,
         2000,
@@ -64,9 +64,9 @@ fn setup_transferring(table: &mut FlowTable, bytes_rx: u64) -> f64 {
         let data = vec![0xabu8; chunk_size];
         let data_frame = build_tcp_packet(
             SERVER,
-            SERVER,
-            CLIENT_PORT,
+            CLIENT,
             SERVER_PORT,
+            CLIENT_PORT,
             56,
             TcpFlag::PshAck,
             seq,
@@ -184,9 +184,9 @@ fn test_probabilistic_throttle() {
     // SYN-ACK → Established
     let syn_ack_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         56,
         TcpFlag::SynAck,
         2000,
@@ -202,9 +202,9 @@ fn test_probabilistic_throttle() {
     let data = vec![0xabu8; 1400];
     let data_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         56,
         TcpFlag::PshAck,
         3000,
@@ -220,9 +220,9 @@ fn test_probabilistic_throttle() {
     for _ in 0..10 {
         let retrans_frame = build_tcp_packet(
             SERVER,
-            SERVER,
-            CLIENT_PORT,
+            CLIENT,
             SERVER_PORT,
+            CLIENT_PORT,
             56,
             TcpFlag::PshAck,
             3000,

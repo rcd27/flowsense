@@ -51,6 +51,7 @@ impl Default for InjectionConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThroughputConfig {
     pub cliff_threshold: u64,
+    pub cliff_min_bytes: u64,
     pub cliff_timeout: f64,
     pub throttle_window: f64,
     pub retransmit_ratio: f64,
@@ -60,6 +61,7 @@ impl Default for ThroughputConfig {
     fn default() -> Self {
         Self {
             cliff_threshold: 20480,
+            cliff_min_bytes: 4096,
             cliff_timeout: 3.0,
             throttle_window: 10.0,
             retransmit_ratio: 0.3,

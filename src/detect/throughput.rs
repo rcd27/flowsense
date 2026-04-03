@@ -11,7 +11,7 @@ pub fn detect_cliff(flow: &FlowState, key: &FlowKey, config: &Config, now: f64) 
         .and_then(|last_data| {
             let stall = now - last_data;
             let cliff_condition = stall >= cfg.cliff_timeout
-                && flow.bytes_rx > 0
+                && flow.bytes_rx >= cfg.cliff_min_bytes
                 && flow.bytes_rx <= cfg.cliff_threshold * 2;
             cliff_condition.then(|| Signal::ThrottleCliff {
                 ts: now,

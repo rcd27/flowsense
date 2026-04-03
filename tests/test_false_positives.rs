@@ -40,9 +40,9 @@ fn setup_established(baseline_ttl: u8) -> (FlowTable, f64) {
     // SYN-ACK from server with baseline TTL
     let syn_ack_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         baseline_ttl,
         TcpFlag::SynAck,
         2000,
@@ -81,9 +81,9 @@ fn test_server_rst_with_normal_ttl_not_injection() {
     // RST with TTL=52 (baseline=52, delta=0 ≤ tolerance=2) → should not trigger injection
     let rst_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         52,
         TcpFlag::Rst,
         3000,
@@ -116,9 +116,9 @@ fn test_ecmp_ttl_jitter_not_injection() {
     // ttl_anomaly returns Some only when delta > tolerance, so delta==tolerance → None
     let data_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         54,
         TcpFlag::PshAck,
         3000,
@@ -166,9 +166,9 @@ fn test_slow_server_not_silent_drop() {
     // SYN-ACK at t=0.1
     let syn_ack_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         52,
         TcpFlag::SynAck,
         2000,
@@ -200,9 +200,9 @@ fn test_slow_server_not_silent_drop() {
     // Use SERVER_PORT_HIGH so PshAck is classified as FromServer → bytes_rx > 0
     let response_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT_HIGH,
+        CLIENT_PORT,
         52,
         TcpFlag::PshAck,
         3000,
@@ -235,9 +235,9 @@ fn test_legitimate_fin_not_injection() {
     // FIN with TTL=52 (matching baseline, delta=0 ≤ tolerance=2) → no injection
     let fin_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         52,
         TcpFlag::Fin,
         3000,
@@ -288,9 +288,9 @@ fn test_bursty_traffic_not_throttle() {
     // SYN-ACK → Established
     let syn_ack_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT_HIGH,
+        CLIENT_PORT,
         56,
         TcpFlag::SynAck,
         2000,
@@ -309,9 +309,9 @@ fn test_bursty_traffic_not_throttle() {
         let data = vec![0xabu8; 1400];
         let data_frame = build_tcp_packet(
             SERVER,
-            SERVER,
-            CLIENT_PORT,
+            CLIENT,
             SERVER_PORT_HIGH,
+            CLIENT_PORT,
             56,
             TcpFlag::PshAck,
             seq,

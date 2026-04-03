@@ -36,9 +36,9 @@ fn setup_established_flow(table: &mut FlowTable, baseline_ttl: u8) -> f64 {
     // SYN-ACK from server with baseline TTL
     let syn_ack_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         baseline_ttl,
         TcpFlag::SynAck,
         2000,
@@ -78,9 +78,9 @@ fn test_rst_injection_by_ttl_anomaly() {
     // RST with anomalous TTL 61 (baseline 52, delta 9 > tolerance 2)
     let rst_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         61,
         TcpFlag::Rst,
         3000,
@@ -121,9 +121,9 @@ fn test_rst_with_normal_ttl_no_signal() {
     // RST with TTL 53 (baseline 52, delta 1 ≤ tolerance 2) → no anomaly
     let rst_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         53,
         TcpFlag::Rst,
         3000,
@@ -156,9 +156,9 @@ fn test_fin_injection() {
     // FIN with anomalous TTL 61 (delta 9 > tolerance 2)
     let fin_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         61,
         TcpFlag::Fin,
         3000,
@@ -198,9 +198,9 @@ fn test_window_manipulation() {
     // ACK with window=0 and anomalous TTL 61
     let ack_frame = build_tcp_packet(
         SERVER,
-        SERVER,
-        CLIENT_PORT,
+        CLIENT,
         SERVER_PORT,
+        CLIENT_PORT,
         61,
         TcpFlag::Ack,
         3000,
