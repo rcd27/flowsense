@@ -286,7 +286,8 @@ unsafe fn get_ifindex(fd: i32, name: &str) -> Result<i32, String> {
     let name_bytes = name_cstr.as_bytes_with_nul();
     req.ifr_name[..name_bytes.len()].copy_from_slice(name_bytes);
 
-    let ret = ioctl(fd, SIOCGIFINDEX, &mut req as *mut IfReq);
+    #[allow(clippy::cast_possible_wrap)]
+    let ret = ioctl(fd, SIOCGIFINDEX as _, &mut req as *mut IfReq);
     if ret < 0 {
         return Err(format!(
             "ioctl(SIOCGIFINDEX) for '{}' failed: {}",
