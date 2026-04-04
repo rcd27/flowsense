@@ -11,7 +11,7 @@ use flowsense::{
     config::Config,
     detect, emit,
     flow::{self, FlowTable},
-    parser,
+    parser, protocol,
     signal::Signal,
 };
 
@@ -142,7 +142,9 @@ fn main() {
     }
 
     if cli.interface.is_none() && cli.read.is_none() {
-        eprintln!("error: either -i <interface> or -r <file> is required");
+        protocol::emit(&protocol::state_fatal(
+            "either -i <interface> or -r <file> is required",
+        ));
         std::process::exit(1);
     }
 
@@ -150,11 +152,11 @@ fn main() {
         Some(ref path) => match Config::from_file(path) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!(
-                    "error: failed to load config from {}: {}",
+                protocol::emit(&protocol::state_fatal(&format!(
+                    "failed to load config from {}: {}",
                     path.display(),
                     e
-                );
+                )));
                 std::process::exit(1);
             }
         },
@@ -209,7 +211,10 @@ fn main() {
     ) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("error: failed to open capture on {}: {}", interface, e);
+            protocol::emit(&protocol::state_fatal(&format!(
+                "failed to open capture on {}: {}",
+                interface, e
+            )));
             std::process::exit(1);
         }
     };
@@ -221,6 +226,8 @@ fn main() {
     let mut signal_count: u64 = 0;
     let mut last_periodic_check = clock.now_secs();
     let periodic_interval = 5.0_f64;
+
+    protocol::emit(&protocol::state_alive(env!("CARGO_PKG_VERSION")));
 
     if !cli.quiet {
         eprintln!(
@@ -328,6 +335,12 @@ fn main() {
                 table.mark_signal_fired(_fkey);
             }
             table.expire(now);
+            protocol::emit(&protocol::data_gauge(
+                packets_seen,
+                table.len() as u64,
+                signal_count,
+                now,
+            ));
             last_periodic_check = now;
         }
     }

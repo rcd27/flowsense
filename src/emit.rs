@@ -13,7 +13,9 @@ pub fn format_json(signal: &Signal) -> String {
             *tag = Value::String(signal.name().to_string());
         }
     }
-    serde_json::to_string(&value).unwrap_or_default()
+    let raw = serde_json::to_string(&value).unwrap_or_default();
+    // Wrap in Component Protocol envelope: {"data":"signal","name":"...","evidence":{...}}
+    crate::protocol::wrap_signal(&raw)
 }
 
 pub fn format_human(signal: &Signal) -> String {
