@@ -303,7 +303,7 @@ fn test_bursty_traffic_not_throttle() {
     ts += 0.1;
 
     // Send 12 chunks of 1400 bytes → 16800 bytes total
-    // bytes_rx=16800 ≤ cliff_threshold*2=40960, but pause < cliff_timeout=3 → None
+    // bytes_rx=16800 ≤ cliff_threshold*2=65536, but pause < cliff_timeout=3 → None
     let mut seq: u32 = 3000;
     for _ in 0..12 {
         let data = vec![0xabu8; 1400];

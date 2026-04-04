@@ -74,6 +74,8 @@ fn test_ip_blackhole_after_syn_timeout() {
     let mut table = FlowTable::new(config.flows.clone());
 
     send_syn(&mut table, 0.0);
+    // SYN retransmit at t=3 (TCP stack retries after no SYN-ACK)
+    send_syn(&mut table, 3.0);
 
     let key = FlowKey {
         dst_ip: SERVER,
@@ -126,15 +128,15 @@ fn test_silent_drop_after_client_hello() {
     };
     let flow = table.get(&key).expect("flow must exist");
 
-    // client_hello_ts=1.0, post_hello_timeout=10.0 → triggers at now >= 11.0
-    let signal = detect_timeout(flow, &key, &config, 11.0);
+    // client_hello_ts=1.0, post_hello_timeout=15.0 → triggers at now >= 16.0
+    let signal = detect_timeout(flow, &key, &config, 16.0);
 
     assert!(
         matches!(
             signal,
             Some(Signal::SilentDrop { dst_port: 443, sni: Some(ref s), .. }) if s == "example.com"
         ),
-        "expected SilentDrop with sni=example.com at t=11, got {:?}",
+        "expected SilentDrop with sni=example.com at t=16, got {:?}",
         signal
     );
 }

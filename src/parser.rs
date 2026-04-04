@@ -183,13 +183,20 @@ fn parse_sni_from_extensions(data: &[u8]) -> Option<String> {
     None
 }
 
+/// Parse a TCP segment from the IP payload.
+///
+/// `real_ip_payload_len` is the real (pre-snaplen) IP payload size from the
+/// IP total_len header. The actual `ip_payload` slice may be truncated.
+/// We use the truncated slice for header/TLS parsing but report the REAL
+/// payload length for accurate byte counters (bytes_rx, bytes_tx).
 fn parse_tcp(
     ip_payload: &[u8],
     src_ip: Ipv4Addr,
     dst_ip: Ipv4Addr,
     ttl: u8,
+    real_ip_payload_len: usize,
 ) -> Option<ParsedPacket> {
-    // TCP header minimum 20 bytes
+    // TCP header minimum 20 bytes — need at least this much captured
     if ip_payload.len() < 20 {
         return None;
     }
@@ -210,11 +217,19 @@ fn parse_tcp(
     }
     let flags = TcpFlagSet::from_byte(ip_payload[13]);
     let window = ((ip_payload[14] as u16) << 8) | (ip_payload[15] as u16);
-    let payload = &ip_payload[tcp_header_len..];
-    let payload_len = payload.len();
-    let has_client_hello = payload.len() >= 6 && payload[0] == 0x16 && payload[5] == 0x01;
+
+    // Captured TCP payload (may be truncated by snaplen).
+    // Used for TLS ClientHello detection — we only need the first ~6 bytes.
+    let captured_payload = &ip_payload[tcp_header_len..];
+
+    // Real TCP payload length from IP total_len (accurate even when truncated).
+    // Used for byte counters (bytes_rx/bytes_tx) so throughput detection works.
+    let payload_len = real_ip_payload_len.saturating_sub(tcp_header_len);
+
+    let has_client_hello =
+        captured_payload.len() >= 6 && captured_payload[0] == 0x16 && captured_payload[5] == 0x01;
     let sni = if has_client_hello {
-        extract_sni(payload)
+        extract_sni(captured_payload)
     } else {
         None
     };
@@ -236,11 +251,15 @@ fn parse_tcp(
     })
 }
 
+/// Parse a UDP datagram from the IP payload.
+///
+/// Like parse_tcp, uses `real_ip_payload_len` for accurate payload size.
 fn parse_udp(
     ip_payload: &[u8],
     src_ip: Ipv4Addr,
     dst_ip: Ipv4Addr,
     ttl: u8,
+    real_ip_payload_len: usize,
 ) -> Option<ParsedPacket> {
     // UDP header: 8 bytes
     if ip_payload.len() < 8 {
@@ -248,11 +267,8 @@ fn parse_udp(
     }
     let src_port = ((ip_payload[0] as u16) << 8) | (ip_payload[1] as u16);
     let dst_port = ((ip_payload[2] as u16) << 8) | (ip_payload[3] as u16);
-    let payload_len = if ip_payload.len() > 8 {
-        ip_payload.len() - 8
-    } else {
-        0
-    };
+    // Real payload length from IP header (not truncated by snaplen)
+    let payload_len = real_ip_payload_len.saturating_sub(8);
 
     Some(ParsedPacket {
         src_ip,
@@ -295,19 +311,29 @@ pub fn parse(raw: &[u8]) -> Option<ParsedPacket> {
     if ip_header_len < 20 || ip.len() < ip_header_len {
         return None;
     }
+    // IP total_len is the REAL packet size (before snaplen truncation).
+    // Captured bytes (ip.len()) may be less than total_len when snaplen < packet size.
+    // We use the captured portion for header parsing, but report the REAL payload
+    // length so that byte counters (bytes_rx, bytes_tx) reflect actual traffic volume.
     let total_len = ((ip[2] as usize) << 8) | (ip[3] as usize);
-    if ip.len() < total_len {
+    let captured_len = ip.len().min(total_len);
+    if captured_len < ip_header_len {
         return None;
     }
     let ttl = ip[8];
     let protocol = ip[9];
     let src_ip = Ipv4Addr::new(ip[12], ip[13], ip[14], ip[15]);
     let dst_ip = Ipv4Addr::new(ip[16], ip[17], ip[18], ip[19]);
-    let ip_payload = &ip[ip_header_len..total_len];
+    // Use captured bytes for parsing (we can only read what's in the buffer),
+    // but pass total_len so parse_tcp/parse_udp can compute real payload size.
+    let ip_payload = &ip[ip_header_len..captured_len];
+
+    // real_ip_payload_len = total IP payload (may be larger than captured ip_payload)
+    let real_ip_payload_len = total_len.saturating_sub(ip_header_len);
 
     match protocol {
-        6 => parse_tcp(ip_payload, src_ip, dst_ip, ttl),
-        17 => parse_udp(ip_payload, src_ip, dst_ip, ttl),
+        6 => parse_tcp(ip_payload, src_ip, dst_ip, ttl, real_ip_payload_len),
+        17 => parse_udp(ip_payload, src_ip, dst_ip, ttl, real_ip_payload_len),
         _ => None,
     }
 }

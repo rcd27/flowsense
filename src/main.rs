@@ -68,9 +68,17 @@ struct Cli {
     /// Print default config and exit
     #[arg(long)]
     print_config: bool,
+
+    /// Dump all flows to stderr on exit (diagnostic)
+    #[arg(long)]
+    dump_flows: bool,
 }
 
-fn collect_timeout_signals(table: &FlowTable, config: &Config, now: f64) -> Vec<Signal> {
+fn collect_timeout_signals(
+    table: &FlowTable,
+    config: &Config,
+    now: f64,
+) -> Vec<(flow::FlowKey, Signal)> {
     table
         .iter()
         .flat_map(|(key, flow)| {
@@ -82,6 +90,7 @@ fn collect_timeout_signals(table: &FlowTable, config: &Config, now: f64) -> Vec<
             ]
             .into_iter()
             .flatten()
+            .map(move |sig| (*key, sig))
         })
         .collect()
 }
@@ -245,12 +254,13 @@ fn main() {
             Some(bytes) => bytes,
             None => {
                 // No packet — run periodic checks then continue
-                let elapsed = now - last_periodic_check;
+                let now_fresh = clock.now_secs();
+                let elapsed = now_fresh - last_periodic_check;
                 if elapsed >= periodic_interval {
-                    let signals = collect_timeout_signals(&table, &cfg, now);
-                    for sig in signals {
-                        if signal_matches_filter(&sig, filter_dst, filter_port) {
-                            emit_signal(&sig, cli.json, &mut out);
+                    let signals = collect_timeout_signals(&table, &cfg, now_fresh);
+                    for (_fkey, sig) in &signals {
+                        if signal_matches_filter(sig, filter_dst, filter_port) {
+                            emit_signal(sig, cli.json, &mut out);
                             signal_count += 1;
                             if let Some(max) = cli.count {
                                 if signal_count >= max {
@@ -259,8 +269,11 @@ fn main() {
                             }
                         }
                     }
-                    table.expire(now);
-                    last_periodic_check = now;
+                    for (_fkey, _) in &signals {
+                        table.mark_signal_fired(_fkey);
+                    }
+                    table.expire(now_fresh);
+                    last_periodic_check = now_fresh;
                 }
                 continue;
             }
@@ -300,9 +313,9 @@ fn main() {
         let elapsed = now - last_periodic_check;
         if elapsed >= periodic_interval {
             let signals = collect_timeout_signals(&table, &cfg, now);
-            for sig in signals {
-                if signal_matches_filter(&sig, filter_dst, filter_port) {
-                    emit_signal(&sig, cli.json, &mut out);
+            for (_fkey, sig) in &signals {
+                if signal_matches_filter(sig, filter_dst, filter_port) {
+                    emit_signal(sig, cli.json, &mut out);
                     signal_count += 1;
                     if let Some(max) = cli.count {
                         if signal_count >= max {
@@ -311,9 +324,36 @@ fn main() {
                     }
                 }
             }
+            for (_fkey, _) in &signals {
+                table.mark_signal_fired(_fkey);
+            }
             table.expire(now);
             last_periodic_check = now;
         }
+    }
+
+    // Dump all flows for diagnostic purposes
+    if cli.dump_flows {
+        eprintln!("flowsense: === flow dump ===");
+        let mut flows: Vec<_> = table.iter().collect();
+        flows.sort_by(|a, b| a.1.syn_ts.partial_cmp(&b.1.syn_ts).unwrap());
+        for (key, flow) in flows {
+            eprintln!(
+                "  {:>15}:{:<5}  phase={:<13}  ttl_base={:<4}  hello={:<5}  sni={:<30}  rx={:<8}  tx={:<8}  retx_c={} retx_s={} rst_salvo={}",
+                key.dst_ip,
+                key.dst_port,
+                format!("{:?}", flow.phase),
+                flow.ttl_baseline.map(|t| t.to_string()).unwrap_or("-".into()),
+                flow.has_client_hello,
+                flow.sni.as_deref().unwrap_or("-"),
+                flow.bytes_rx,
+                flow.bytes_tx,
+                flow.retransmit_count,
+                flow.server_retransmit_count,
+                flow.rst_salvo_count,
+            );
+        }
+        eprintln!("flowsense: === end flow dump ===");
     }
 
     // Print summary on exit

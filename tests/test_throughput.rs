@@ -137,7 +137,7 @@ fn test_no_cliff_if_large_transfer() {
     let config = Config::default();
     let mut table = FlowTable::new(config.flows.clone());
 
-    // 1MB transferred — bytes_rx > cliff_threshold * 2 (40960)
+    // 1MB transferred — bytes_rx > cliff_threshold * 2 (65536)
     let last_ts = setup_transferring(&mut table, 1_048_576);
 
     let key = FlowKey {

@@ -12,7 +12,7 @@ pub struct CaptureConfig {
 impl Default for CaptureConfig {
     fn default() -> Self {
         Self {
-            snaplen: 128,
+            snaplen: 512,
             promisc: true,
         }
     }
@@ -28,7 +28,7 @@ impl Default for DropConfig {
     fn default() -> Self {
         Self {
             syn_timeout: 5.0,
-            post_hello_timeout: 10.0,
+            post_hello_timeout: 15.0,
         }
     }
 }
@@ -60,8 +60,8 @@ pub struct ThroughputConfig {
 impl Default for ThroughputConfig {
     fn default() -> Self {
         Self {
-            cliff_threshold: 20480,
-            cliff_min_bytes: 4096,
+            cliff_threshold: 32768, // 32KB — upper bound for cliff (TSPU cuts at ~16KB in Russia)
+            cliff_min_bytes: 8192,  // 8KB — minimum data before cliff detection
             cliff_timeout: 3.0,
             throttle_window: 10.0,
             retransmit_ratio: 0.3,
@@ -128,13 +128,13 @@ mod tests {
     #[test]
     fn default_config_values() {
         let cfg = Config::default();
-        assert_eq!(cfg.capture.snaplen, 128);
+        assert_eq!(cfg.capture.snaplen, 512);
         assert!(cfg.capture.promisc);
         assert_eq!(cfg.detection.drop.syn_timeout, 5.0);
-        assert_eq!(cfg.detection.drop.post_hello_timeout, 10.0);
+        assert_eq!(cfg.detection.drop.post_hello_timeout, 15.0);
         assert_eq!(cfg.detection.injection.ttl_tolerance, 2);
         assert_eq!(cfg.detection.injection.injection_window, 500);
-        assert_eq!(cfg.detection.throughput.cliff_threshold, 20480);
+        assert_eq!(cfg.detection.throughput.cliff_threshold, 32768);
         assert_eq!(cfg.detection.throughput.cliff_timeout, 3.0);
         assert_eq!(cfg.detection.throughput.throttle_window, 10.0);
         assert_eq!(cfg.detection.throughput.retransmit_ratio, 0.3);
