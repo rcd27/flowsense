@@ -1,0 +1,87 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: rp
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build static musl binaries for common Linux targets.
+  # FlowSense requires CAP_NET_RAW + AF_PACKET, so only Linux is supported.
+  build:
+    if: needs.release-please.outputs.release_created == 'true'
+    needs: [release-please]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, target: x86_64-unknown-linux-musl,  upx: true }
+          - { arch: arm64,  target: aarch64-unknown-linux-musl,  upx: true }
+          - { arch: arm,    target: arm-unknown-linux-musleabi,   upx: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cross
+
+      - name: Build
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Compress with UPX
+        if: matrix.upx
+        uses: crazy-max/ghaction-upx@v3
+        with:
+          version: latest
+          files: target/${{ matrix.target }}/release/flowsense
+          args: --best --lzma
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flowsense-linux-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/flowsense
+          if-no-files-found: error
+
+  upload-assets:
+    if: always() && needs.release-please.outputs.release_created == 'true'
+    needs: [release-please, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: flowsense-*
+          path: artifacts
+
+      - name: Package archives
+        run: |
+          mkdir -p release
+          for dir in artifacts/flowsense-linux-*; do
+            arch=$(basename "$dir" | sed 's/flowsense-linux-//')
+            chmod +x "$dir/flowsense"
+            tar -czf "release/flowsense-linux-${arch}.tar.gz" -C "$dir" flowsense
+          done
+
+      - name: Generate checksums
+        working-directory: release
+        run: sha256sum flowsense-*.tar.gz > SHA256SUMS.txt
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" release/flowsense-*.tar.gz release/SHA256SUMS.txt --repo "${{ github.repository }}"
