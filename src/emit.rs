@@ -113,9 +113,21 @@ mod tests {
             salvo_count: 3,
         };
         let json = format_json(&signal);
-        assert!(json.contains("RST_INJECTION"), "should contain RST_INJECTION, got: {}", json);
-        assert!(json.contains(r#""type":"data""#), "should contain type:data, got: {}", json);
-        assert!(json.contains(r#""kind":"signal""#), "should contain kind:signal, got: {}", json);
+        assert!(
+            json.contains("RST_INJECTION"),
+            "should contain RST_INJECTION, got: {}",
+            json
+        );
+        assert!(
+            json.contains(r#""type":"data""#),
+            "should contain type:data, got: {}",
+            json
+        );
+        assert!(
+            json.contains(r#""kind":"signal""#),
+            "should contain kind:signal, got: {}",
+            json
+        );
         assert!(!json.contains('\n'), "should be single line");
     }
 

@@ -49,25 +49,37 @@ pub struct GaugePayload {
 
 // Convenience constructors (replace old functions)
 pub fn state_alive(version: &str) -> Payload {
-    Payload::State(StatePayload::Alive { version: version.to_string() })
+    Payload::State(StatePayload::Alive {
+        version: version.to_string(),
+    })
 }
 
 pub fn state_fatal(reason: &str) -> Payload {
-    Payload::State(StatePayload::Fatal { reason: reason.to_string() })
+    Payload::State(StatePayload::Fatal {
+        reason: reason.to_string(),
+    })
 }
 
 pub fn state_degraded(reason: &str) -> Payload {
-    Payload::State(StatePayload::Degraded { reason: reason.to_string() })
+    Payload::State(StatePayload::Degraded {
+        reason: reason.to_string(),
+    })
 }
 
 pub fn data_gauge(packets: u64, flows: u64, signals: u64, elapsed_secs: f64) -> Payload {
     Payload::Data(DataPayload::Gauge(GaugePayload {
-        packets, flows, signals, elapsed_secs,
+        packets,
+        flows,
+        signals,
+        elapsed_secs,
     }))
 }
 
 pub fn data_signal(signal_type: AlertSignalType, fields: serde_json::Value) -> Payload {
-    Payload::Data(DataPayload::Signal(SignalPayload { signal_type, fields }))
+    Payload::Data(DataPayload::Signal(SignalPayload {
+        signal_type,
+        fields,
+    }))
 }
 
 pub fn emit(payload: &Payload) {

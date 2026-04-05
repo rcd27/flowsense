@@ -349,7 +349,11 @@ fn main() {
     if cli.dump_flows {
         eprintln!("flowsense: === flow dump ===");
         let mut flows: Vec<_> = table.iter().collect();
-        flows.sort_by(|a, b| a.1.syn_ts.partial_cmp(&b.1.syn_ts).unwrap_or(std::cmp::Ordering::Less));
+        flows.sort_by(|a, b| {
+            a.1.syn_ts
+                .partial_cmp(&b.1.syn_ts)
+                .unwrap_or(std::cmp::Ordering::Less)
+        });
         for (key, flow) in flows {
             eprintln!(
                 "  {:>15}:{:<5}  phase={:<13}  ttl_base={:<4}  hello={:<5}  sni={:<30}  rx={:<8}  tx={:<8}  retx_c={} retx_s={} rst_salvo={}",

@@ -54,6 +54,9 @@ fn all_messages_have_type_discriminator() {
     for payload in &messages {
         let json = serde_json::to_string(payload).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert!(parsed.get("type").is_some(), "must have 'type' field: {json}");
+        assert!(
+            parsed.get("type").is_some(),
+            "must have 'type' field: {json}"
+        );
     }
 }
