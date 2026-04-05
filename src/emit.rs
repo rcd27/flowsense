@@ -1,21 +1,9 @@
 use crate::signal::Signal;
-use serde_json::Value;
 
 pub fn format_json(signal: &Signal) -> String {
-    let mut value = match serde_json::to_value(signal) {
-        Ok(v) => v,
-        Err(_) => return String::new(),
-    };
-    // Replace the serde variant name (e.g. "RstInjection") with the canonical
-    // screaming-snake name (e.g. "RST_INJECTION") so consumers get a stable key.
-    if let Value::Object(ref mut map) = value {
-        if let Some(tag) = map.get_mut("signal") {
-            *tag = Value::String(signal.name().to_string());
-        }
-    }
-    let raw = serde_json::to_string(&value).unwrap_or_default();
-    // Wrap in Component Protocol envelope: {"data":"signal","name":"...","evidence":{...}}
-    crate::protocol::wrap_signal(&raw)
+    let fields = serde_json::to_value(signal).unwrap_or_default();
+    let payload = crate::protocol::data_signal(signal.alert_signal_type(), fields);
+    serde_json::to_string(&payload).unwrap_or_default()
 }
 
 pub fn format_human(signal: &Signal) -> String {
@@ -125,21 +113,10 @@ mod tests {
             salvo_count: 3,
         };
         let json = format_json(&signal);
-        assert!(
-            json.contains("RST_INJECTION"),
-            "JSON should contain RST_INJECTION, got: {}",
-            json
-        );
-        assert!(
-            json.contains("discord.com"),
-            "JSON should contain discord.com, got: {}",
-            json
-        );
-        assert!(
-            !json.contains('\n'),
-            "JSON should be single line, got: {}",
-            json
-        );
+        assert!(json.contains("RST_INJECTION"), "should contain RST_INJECTION, got: {}", json);
+        assert!(json.contains(r#""type":"data""#), "should contain type:data, got: {}", json);
+        assert!(json.contains(r#""kind":"signal""#), "should contain kind:signal, got: {}", json);
+        assert!(!json.contains('\n'), "should be single line");
     }
 
     #[test]

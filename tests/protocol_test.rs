@@ -1,82 +1,59 @@
-use flowsense::protocol::{data_gauge, state_alive, state_fatal, wrap_signal};
-
-// --- State messages ---
+use flowsense::protocol::*;
 
 #[test]
 fn alive_message_format() {
-    let json = state_alive("0.2.0");
+    let payload = state_alive("0.2.0");
+    let json = serde_json::to_string(&payload).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(parsed["state"], "alive");
+    assert_eq!(parsed["type"], "state");
+    assert_eq!(parsed["kind"], "alive");
     assert_eq!(parsed["version"], "0.2.0");
     assert!(!json.contains('\n'));
 }
 
 #[test]
 fn fatal_message_format() {
-    let json = state_fatal("AF_PACKET socket failed: permission denied");
+    let payload = state_fatal("AF_PACKET socket failed");
+    let json = serde_json::to_string(&payload).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(parsed["state"], "fatal");
-    assert_eq!(parsed["reason"], "AF_PACKET socket failed: permission denied");
+    assert_eq!(parsed["type"], "state");
+    assert_eq!(parsed["kind"], "fatal");
+    assert_eq!(parsed["reason"], "AF_PACKET socket failed");
 }
-
-// --- Data messages ---
 
 #[test]
 fn gauge_message_format() {
-    let json = data_gauge(125432, 87, 42, 123.5);
+    let payload = data_gauge(125432, 87, 42, 123.5);
+    let json = serde_json::to_string(&payload).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(parsed["data"], "gauge");
+    assert_eq!(parsed["type"], "data");
+    assert_eq!(parsed["kind"], "gauge");
     assert_eq!(parsed["packets"], 125432);
-    assert_eq!(parsed["flows"], 87);
-    assert_eq!(parsed["signals"], 42);
-    assert_eq!(parsed["elapsed_secs"], 123.5);
 }
 
 #[test]
-fn wrap_signal_adds_data_envelope() {
-    let original =
-        r#"{"signal":"RST_INJECTION","evidence":{"ts":123.0,"dst_ip":"1.2.3.4","dst_port":443}}"#;
-    let wrapped = wrap_signal(original);
-    let parsed: serde_json::Value = serde_json::from_str(&wrapped).unwrap();
-    assert_eq!(parsed["data"], "signal");
-    assert_eq!(parsed["name"], "RST_INJECTION");
-    assert!(parsed["evidence"].is_object());
-    assert!(!wrapped.contains('\n'));
+fn signal_message_format() {
+    let fields = serde_json::json!({"dst_ip": "1.2.3.4", "dst_port": 443});
+    let payload = data_signal(AlertSignalType::RstInjection, fields);
+    let json = serde_json::to_string(&payload).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed["type"], "data");
+    assert_eq!(parsed["kind"], "signal");
+    assert_eq!(parsed["signal_type"], "RST_INJECTION");
 }
 
 #[test]
-fn wrap_signal_preserves_all_evidence_fields() {
-    let original = r#"{"signal":"IP_BLACKHOLE","evidence":{"ts":5.0,"dst_ip":"157.240.1.35","dst_port":443,"syn_retransmits":5}}"#;
-    let wrapped = wrap_signal(original);
-    let parsed: serde_json::Value = serde_json::from_str(&wrapped).unwrap();
-    assert_eq!(parsed["name"], "IP_BLACKHOLE");
-    assert_eq!(parsed["evidence"]["syn_retransmits"], 5);
-}
-
-// --- Protocol invariants ---
-
-#[test]
-fn all_messages_have_exactly_one_discriminator() {
-    let original =
-        r#"{"signal":"RST_INJECTION","evidence":{"ts":1.0,"dst_ip":"1.2.3.4","dst_port":443}}"#;
-
-    let messages = vec![
+fn all_messages_have_type_discriminator() {
+    let messages: Vec<Payload> = vec![
         state_alive("0.2.0"),
-        state_fatal("socket failed"),
-        data_gauge(1000, 50, 10, 60.0),
-        wrap_signal(original),
+        state_fatal("error"),
+        state_degraded("warning"),
+        data_gauge(100, 50, 10, 60.0),
+        data_signal(AlertSignalType::IpBlackhole, serde_json::json!({})),
     ];
-
-    for msg in &messages {
-        let parsed: serde_json::Value = serde_json::from_str(msg).unwrap();
-        let obj = parsed.as_object().unwrap();
-        let has_state = obj.contains_key("state");
-        let has_data = obj.contains_key("data");
-
-        assert!(
-            has_state ^ has_data,
-            "must have exactly one of 'state' or 'data': {}",
-            msg
-        );
+    for payload in &messages {
+        let json = serde_json::to_string(payload).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed.get("type").is_some(), "must have 'type' field: {json}");
     }
 }

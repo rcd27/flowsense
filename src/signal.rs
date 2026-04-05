@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::protocol::AlertSignalType;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "signal", content = "evidence")]
 pub enum Signal {
@@ -133,6 +135,21 @@ impl Signal {
         }
     }
 
+    pub fn alert_signal_type(&self) -> AlertSignalType {
+        match self {
+            Signal::RstInjection { .. } => AlertSignalType::RstInjection,
+            Signal::FinInjection { .. } => AlertSignalType::TlsInterference,
+            Signal::WindowManipulation { .. } => AlertSignalType::TlsInterference,
+            Signal::DnsPoisoning { .. } => AlertSignalType::TlsInterference,
+            Signal::HttpRedirectInjection { .. } => AlertSignalType::TlsInterference,
+            Signal::IpBlackhole { .. } => AlertSignalType::IpBlackhole,
+            Signal::SilentDrop { .. } => AlertSignalType::IpBlackhole,
+            Signal::ThrottleCliff { .. } => AlertSignalType::ThrottleDetected,
+            Signal::ThrottleProbabilistic { .. } => AlertSignalType::ThrottleDetected,
+            Signal::AckDrop { .. } => AlertSignalType::ThrottleDetected,
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Signal::RstInjection { .. } => "RST_INJECTION",
@@ -168,6 +185,21 @@ mod tests {
         assert_eq!(s.name(), "RST_INJECTION");
         assert_eq!(s.dst_port(), 443);
         assert_eq!(s.dst_ip(), "1.2.3.4");
+    }
+
+    #[test]
+    fn alert_signal_type_mapping() {
+        let rst = Signal::RstInjection { ts: 0.0, dst_ip: "1.2.3.4".into(), dst_port: 443, sni: None, ttl_expected: 52, ttl_actual: 61, delta_ms: 12, salvo_count: 3 };
+        assert_eq!(rst.alert_signal_type(), AlertSignalType::RstInjection);
+
+        let blackhole = Signal::IpBlackhole { ts: 0.0, dst_ip: "1.2.3.4".into(), dst_port: 443, syn_retransmits: 5 };
+        assert_eq!(blackhole.alert_signal_type(), AlertSignalType::IpBlackhole);
+
+        let silent = Signal::SilentDrop { ts: 0.0, dst_ip: "1.2.3.4".into(), dst_port: 443, sni: None, retransmit_count: 3 };
+        assert_eq!(silent.alert_signal_type(), AlertSignalType::IpBlackhole);
+
+        let throttle = Signal::ThrottleCliff { ts: 0.0, dst_ip: "1.2.3.4".into(), dst_port: 443, sni: None, bytes_before_cliff: 1000, stall_duration: 3.0 };
+        assert_eq!(throttle.alert_signal_type(), AlertSignalType::ThrottleDetected);
     }
 
     #[test]
