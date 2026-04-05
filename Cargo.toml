@@ -1,6 +1,6 @@
 [package]
 name = "flowsense"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Passive DPI interference detector for Linux L2 bridges"
 license = "MIT"
