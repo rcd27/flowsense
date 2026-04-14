@@ -71,6 +71,7 @@ pub fn detect_timeout(
                     ts: now,
                     dst_ip: key.dst_ip.to_string(),
                     dst_port: key.dst_port,
+                    sni: flow.sni.clone(),
                     syn_retransmits: flow.retransmit_count,
                 }),
                 false => None,

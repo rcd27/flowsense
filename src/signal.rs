@@ -54,6 +54,7 @@ pub enum Signal {
         ts: f64,
         dst_ip: String,
         dst_port: u16,
+        sni: Option<String>,
         syn_retransmits: u32,
     },
     SilentDrop {
@@ -164,6 +165,49 @@ impl Signal {
             Signal::AckDrop { .. } => "ACK_DROP",
         }
     }
+
+    pub fn sni(&self) -> Option<&str> {
+        match self {
+            Signal::RstInjection { sni, .. } => sni.as_deref(),
+            Signal::FinInjection { sni, .. } => sni.as_deref(),
+            Signal::WindowManipulation { sni, .. } => sni.as_deref(),
+            Signal::DnsPoisoning { .. } => None,
+            Signal::HttpRedirectInjection { sni, .. } => sni.as_deref(),
+            Signal::IpBlackhole { sni, .. } => sni.as_deref(),
+            Signal::SilentDrop { sni, .. } => sni.as_deref(),
+            Signal::ThrottleCliff { sni, .. } => sni.as_deref(),
+            Signal::ThrottleProbabilistic { sni, .. } => sni.as_deref(),
+            Signal::AckDrop { sni, .. } => sni.as_deref(),
+        }
+    }
+
+    pub fn set_sni(&mut self, new_sni: String) {
+        match self {
+            Signal::RstInjection { sni, .. }
+            | Signal::FinInjection { sni, .. }
+            | Signal::WindowManipulation { sni, .. }
+            | Signal::HttpRedirectInjection { sni, .. }
+            | Signal::IpBlackhole { sni, .. }
+            | Signal::SilentDrop { sni, .. }
+            | Signal::ThrottleCliff { sni, .. }
+            | Signal::ThrottleProbabilistic { sni, .. }
+            | Signal::AckDrop { sni, .. } => {
+                *sni = Some(new_sni);
+            }
+            Signal::DnsPoisoning { .. } => {}
+        }
+    }
+
+    pub fn enrich_sni(&mut self, lookup: impl Fn(std::net::Ipv4Addr) -> Option<String>) {
+        if self.sni().is_some() {
+            return;
+        }
+        if let Ok(ip) = self.dst_ip().parse::<std::net::Ipv4Addr>() {
+            if let Some(domain) = lookup(ip) {
+                self.set_sni(domain);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -205,6 +249,7 @@ mod tests {
             ts: 0.0,
             dst_ip: "1.2.3.4".into(),
             dst_port: 443,
+            sni: None,
             syn_retransmits: 5,
         };
         assert_eq!(blackhole.alert_signal_type(), AlertSignalType::IpBlackhole);

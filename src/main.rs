@@ -9,7 +9,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use flowsense::{
     config::Config,
-    detect, emit,
+    detect, dns,
+    dns_cache::DnsCache,
+    emit,
     flow::{self, FlowTable},
     parser, protocol,
     signal::Signal,
@@ -125,6 +127,19 @@ fn emit_signal<W: Write>(signal: &Signal, json: bool, out: &mut W) {
     let _ = out.flush();
 }
 
+fn extract_dns_payload(raw: &[u8]) -> Option<&[u8]> {
+    if raw.len() < 14 + 20 + 8 {
+        return None;
+    }
+    let ip_header_start = 14;
+    let ip_ihl = (raw[ip_header_start] & 0x0F) as usize * 4;
+    let dns_start = ip_header_start + ip_ihl + 8; // IP header + UDP header (8)
+    if dns_start >= raw.len() {
+        return None;
+    }
+    Some(&raw[dns_start..])
+}
+
 // Process-global running flag written by the OS signal handler.
 static RUNNING: AtomicBool = AtomicBool::new(true);
 
@@ -221,6 +236,7 @@ fn main() {
 
     let clock = time::Clock::new();
     let mut table = FlowTable::new(cfg.flows.clone());
+    let mut dns_cache = DnsCache::new(cfg.flows.max_flows as usize);
 
     let mut packets_seen: u64 = 0;
     let mut signal_count: u64 = 0;
@@ -264,7 +280,10 @@ fn main() {
                 let now_fresh = clock.now_secs();
                 let elapsed = now_fresh - last_periodic_check;
                 if elapsed >= periodic_interval {
-                    let signals = collect_timeout_signals(&table, &cfg, now_fresh);
+                    let mut signals = collect_timeout_signals(&table, &cfg, now_fresh);
+                    for (_fkey, sig) in &mut signals {
+                        sig.enrich_sni(|ip| dns_cache.lookup(ip, now_fresh).map(String::from));
+                    }
                     for (_fkey, sig) in &signals {
                         if signal_matches_filter(sig, filter_dst, filter_port) {
                             emit_signal(sig, cli.json, &mut out);
@@ -280,6 +299,7 @@ fn main() {
                         table.mark_signal_fired(_fkey);
                     }
                     table.expire(now_fresh);
+                    dns_cache.cleanup(now_fresh);
                     last_periodic_check = now_fresh;
                 }
                 continue;
@@ -291,6 +311,23 @@ fn main() {
             Some(p) => p,
             None => continue,
         };
+
+        // Parse DNS responses into cache
+        if pkt.is_dns_response() {
+            if let Some(dns_payload) = extract_dns_payload(raw) {
+                if let Some(response) = dns::parse_dns_response(dns_payload) {
+                    let ips: Vec<std::net::Ipv4Addr> =
+                        response.answers.iter().map(|a| a.ip).collect();
+                    let ttl = response
+                        .answers
+                        .first()
+                        .map(|a| a.ttl as f64)
+                        .unwrap_or(300.0);
+                    dns_cache.insert(&response.domain, &ips, ttl, now);
+                }
+            }
+            continue; // DNS packets don't go into flow table
+        }
 
         // Apply filter
         if !packet_matches_filter(pkt.dst_ip, pkt.dst_port, filter_dst, filter_port) {
@@ -305,7 +342,8 @@ fn main() {
         // Packet-based detection: injection signals
         let flow_key = flow::flow_key_from_packet(&pkt);
         if let Some(flow_state) = table.get(&flow_key) {
-            if let Some(sig) = detect::injection::detect(&pkt, flow_state, &cfg, now) {
+            if let Some(mut sig) = detect::injection::detect(&pkt, flow_state, &cfg, now) {
+                sig.enrich_sni(|ip| dns_cache.lookup(ip, now).map(String::from));
                 emit_signal(&sig, cli.json, &mut out);
                 signal_count += 1;
                 if let Some(max) = cli.count {
@@ -319,7 +357,10 @@ fn main() {
         // Periodic time-based detectors (every 5 seconds)
         let elapsed = now - last_periodic_check;
         if elapsed >= periodic_interval {
-            let signals = collect_timeout_signals(&table, &cfg, now);
+            let mut signals = collect_timeout_signals(&table, &cfg, now);
+            for (_fkey, sig) in &mut signals {
+                sig.enrich_sni(|ip| dns_cache.lookup(ip, now).map(String::from));
+            }
             for (_fkey, sig) in &signals {
                 if signal_matches_filter(sig, filter_dst, filter_port) {
                     emit_signal(sig, cli.json, &mut out);
@@ -335,6 +376,7 @@ fn main() {
                 table.mark_signal_fired(_fkey);
             }
             table.expire(now);
+            dns_cache.cleanup(now);
             protocol::emit(&protocol::data_gauge(
                 packets_seen,
                 table.len() as u64,

@@ -84,6 +84,12 @@ pub struct ParsedPacket {
     pub sni: Option<String>,
 }
 
+impl ParsedPacket {
+    pub fn is_dns_response(&self) -> bool {
+        self.protocol == Protocol::Udp && self.src_port == 53
+    }
+}
+
 fn extract_sni(payload: &[u8]) -> Option<String> {
     // TLS record: content_type=0x16, version (2 bytes), length (2 bytes)
     if payload.len() < 5 {

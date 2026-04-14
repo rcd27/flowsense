@@ -1,5 +1,7 @@
 pub mod config;
 pub mod detect;
+pub mod dns;
+pub mod dns_cache;
 pub mod emit;
 pub mod error;
 pub mod flow;
