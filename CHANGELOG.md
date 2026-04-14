@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.2](https://github.com/rcd27/flowsense/compare/v0.1.1...v0.1.2) (2026-04-14)
+
+
+### Features
+
+* **signals:** closed-loop с добавлением в списки `auto` ([0973931](https://github.com/rcd27/flowsense/commit/0973931456e56cb02deec2d2fc9bcf259bc21977))
+
+
+### Bug Fixes
+
+* **flowsense:** docker network topology fix + e2e test ([705ba23](https://github.com/rcd27/flowsense/commit/705ba23523255b0c00a5a30e89f023a1a0d78a55))
+
 ## [0.1.1](https://github.com/rcd27/flowsense/compare/v0.1.0...v0.1.1) (2026-04-05)
 
 
